@@ -124,9 +124,7 @@ RUN : > /etc/mongod.conf && \
     ${HOME} ${APP_DATA}/.. && \
     usermod -a -G root mongodb && \
 
-VOLUME /data/db /data/configdb
-
-COPY docker-entrypoint.sh /usr/local/bin/
+VOLUME ["/var/lib/mongodb/data"]
 
 
 EXPOSE 27017
