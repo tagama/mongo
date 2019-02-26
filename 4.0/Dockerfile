@@ -1,7 +1,32 @@
 FROM ubuntu:xenial
+ENV SUMMARY="MongoDB NoSQL database server" \
+    DESCRIPTION="MongoDB (from humongous) is a free and open-source \
+cross-platform document-oriented database program. Classified as a NoSQL \
+database program, MongoDB uses JSON-like documents with schemas. This \
+container image contains programs to run mongod server."
 
-# add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
-RUN groupadd -r mongodb && useradd -r -g mongodb mongodb
+LABEL summary="$SUMMARY" \
+      description="$DESCRIPTION" \
+      io.k8s.description="$DESCRIPTION" \
+      io.k8s.display-name="MongoDB 4" \
+      io.openshift.expose-services="27017:mongodb" \
+      io.openshift.tags="database,mongodb,mongodb4" \
+      com.redhat.component="rh-mongodb4-container" \
+      name="mongo:4-xenial" \
+      version="1" \
+      maintainer="SoftwareCollections.org <sclorg@redhat.com>"
+
+ENV MONGODB_VERSION=4.0.6 \
+    # Set paths to avoid hard-coding them in scripts.
+    APP_DATA=/opt/app-root/src \
+    HOME=/var/lib/mongodb \
+    CONTAINER_SCRIPTS_PATH=/usr/share/container-scripts/mongodb \
+    # Incantations to enable Software Collections on `bash` and `sh -i`.
+    ENABLED_COLLECTIONS=mongo-org \
+    BASH_ENV="\${CONTAINER_SCRIPTS_PATH}/scl_enable" \
+    ENV="\${CONTAINER_SCRIPTS_PATH}/scl_enable" \
+    PROMPT_COMMAND=". \${CONTAINER_SCRIPTS_PATH}/scl_enable"
+
 
 RUN set -eux; \
 	apt-get update; \
@@ -85,12 +110,25 @@ RUN set -x \
 	&& rm -rf /var/lib/mongodb \
 	&& mv /etc/mongod.conf /etc/mongod.conf.orig
 
-RUN mkdir -p /data/db /data/configdb \
-	&& chown -R mongodb:mongodb /data/db /data/configdb
+COPY s2i/bin/ $STI_SCRIPTS_PATH
+COPY root /
+
+#RUN mkdir -p /data/db /data/configdb \
+#	&& chown -R 0 /data/db /data/configdb
+#	&& chmod -R g+rwX /data/db /data/configdb
+
+RUN : > /etc/mongod.conf && \
+    mkdir -p ${HOME}/data && \
+    # Set owner 'mongodb:0' and 'g+rw(x)' permission - to avoid problems running container with arbitrary UID
+    /usr/libexec/fix-permissions /etc/mongod.conf ${CONTAINER_SCRIPTS_PATH}/mongod.conf.template \
+    ${HOME} ${APP_DATA}/.. && \
+    usermod -a -G root mongodb && \
+
 VOLUME /data/db /data/configdb
 
 COPY docker-entrypoint.sh /usr/local/bin/
-ENTRYPOINT ["docker-entrypoint.sh"]
+
 
 EXPOSE 27017
-CMD ["mongod"]
+ENTRYPOINT ["container-entrypoint"]
+CMD ["run-mongod"]
